@@ -1,0 +1,14 @@
+{
+  "require": {
+    "firebase/php-jwt": "^5.2",
+    "altorouter/altorouter": "^2.0",
+    "ext-json": "*",
+    "ext-pdo": "*"
+  },
+  "autoload": {
+    "psr-4": {
+      "Api\\": "api/"}
+  }
+
+}
+
