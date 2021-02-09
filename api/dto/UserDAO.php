@@ -1,9 +1,5 @@
 <?php
 
-namespace Api\dto;
-
-use PDO;
-
 class UserDAO
 {
 
@@ -27,14 +23,14 @@ class UserDAO
 
     }
 
-    public function removeUser($conn, $user)
+    public function removeUser($conn,$user)
     {
         $stmt = $conn->prepare("DELETE FROM users WHERE login = :login");
 
         $stmt->execute(['login' => $user->getLogin()]);
     }
 
-    public function updateUserPassword($conn, $user)
+    public function updateUserPassword($conn,$user)
     {
         $stmt = $conn->prepare("UPDATE users SET password = :password WHERE login = :login");
 
@@ -48,12 +44,12 @@ class UserDAO
         $stmt->execute(['login' => $login, 'token' => $token]);
     }
 
-    public function getUserPassword($conn, $login)
+    public function getUserPassword($conn, $login): ?string
     {
         $stmt = $conn->prepare("SELECT password FROM users WHERE login = :login");
 
         $stmt->execute(['login' => $login]);
 
-        return $stmt->fetch();
+        return $stmt->fetch()['password'];
     }
 }

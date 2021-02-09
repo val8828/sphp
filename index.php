@@ -1,23 +1,15 @@
 <?php
-
 require 'vendor/autoload.php';
 
-//include 'vendor/altorouter/altorouter/AltoRouter.php';
-//include 'api/Controllers/AuthController.php';
-//include 'api/Controllers/EntityController.php';
-//include 'api/config/Database.php';
-//include 'api/dto/User.php';
-//include 'api/dto/UserDAO.php';
-//include 'api/dto/Entity.php';
-//include 'api/dto/EntityDao.php';
-//
+require 'api/Controllers/Controller.php';
+require 'api/config/Database.php';
 
 $router = new AltoRouter();
 $router->setBasePath('/v1');
 
 try {
-    $router->map('POST', '/auth', 'AuthController#register', 'user_reg');
-    $router->map('POST', '/something', 'EntityController#createEntity', 'add_entity');
+    $router->map('POST', '/auth', 'Controller#register', 'user_reg');
+    $router->map('POST', '/something', 'Controller#createEntity', 'add_entity');
     $router->map('GET', '/something/[i:id]', 'EntityController#getEntity', 'get_entity');
     $router->map('PUT', '/something/[i:id]', 'EntityController#updateEntity', 'update_entity');
     $router->map('DELETE', '/something/[i:id]', 'EntityController#deleteEntity', 'delete_entity');
@@ -34,7 +26,7 @@ try {
 
 // match current request
 $match = $router->match();
-
+//
 if ($match === false) {
     header("Access-Control-Allow-Origin: *");
     header("Content-Type: application/json; charset=UTF-8");
@@ -45,14 +37,18 @@ if ($match === false) {
 } else {
 
     list($controllerName, $actionName) = explode('#', $match['target']);
+
     if (is_callable(array($controllerName, $actionName))) {
         //TODO Check if $controllerName is controller class
 
-        $database = new Database();
+        //$controller = new $controllerName();
+        try {
+            $controller = new $controllerName;
 
-        $controller = new $controllerName($database);
-
-        call_user_func_array([$controller, $actionName], array($match['params']));
+            call_user_func_array([$controller, $actionName], array($match['params']));
+        }catch (Exception $e) {
+            echo $e;
+        }
     } else {
         echo "no match";
     }

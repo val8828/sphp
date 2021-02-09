@@ -13,8 +13,10 @@ class ComposerStaticInit7a803f8a18380aacfedce2f8749c2fa0
         ),
         'A' => 
         array (
+            'Api\\dto\\' => 8,
+            'Api\\config\\' => 11,
+            'Api\\Controllers\\' => 16,
             'Api\\' => 4,
-            'APi\\Controllers\\' => 16,
         ),
     );
 
@@ -23,13 +25,21 @@ class ComposerStaticInit7a803f8a18380aacfedce2f8749c2fa0
         array (
             0 => __DIR__ . '/..' . '/firebase/php-jwt/src',
         ),
+        'Api\\dto\\' => 
+        array (
+            0 => __DIR__ . '/../..' . '/api/dto',
+        ),
+        'Api\\config\\' => 
+        array (
+            0 => __DIR__ . '/../..' . '/api/config',
+        ),
+        'Api\\Controllers\\' => 
+        array (
+            0 => __DIR__ . '/../..' . '/api/Controllers',
+        ),
         'Api\\' => 
         array (
             0 => __DIR__ . '/../..' . '/api',
-        ),
-        'APi\\Controllers\\' => 
-        array (
-            0 => __DIR__ . '/../..' . '/api/Controllers',
         ),
     );
 

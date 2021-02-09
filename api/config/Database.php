@@ -1,10 +1,5 @@
 <?php
 
-namespace Api\config;
-
-use PDO;
-use PDOException;
-
 class Database
 {
 
