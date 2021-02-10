@@ -1,5 +1,9 @@
 <?php
 
+namespace API\dto;
+
+use PDO;
+
 class UserDAO
 {
 

@@ -1,11 +1,13 @@
 <?php
 
-use \Firebase\JWT\JWT;
+namespace API\Controllers;
 
-include 'api/dto/User.php';
-include 'api/dto/UserDAO.php';
-include 'api/dto/Entity.php';
-include 'api/dto/EntityDao.php';
+use API\config\Database;
+use API\dto\User;
+use API\dto\UserDAO;
+use API\dto\EntityDao;
+use \Firebase\JWT\JWT;
+use PDO;
 
 class Controller
 {
@@ -19,6 +21,7 @@ class Controller
     {
         $this->database = new Database();
         $this->databaseConnect = $this->database->getConnection();
+
         $this->userDao = new UserDAO();
         $this->entityDao = new EntityDao();
     }
@@ -105,7 +108,10 @@ class Controller
             $data = json_decode($postData, true);
 
             $entity = $this->entityDao->createEntity(
-                $this->databaseConnect, $data["field1"], $data["field2"]);
+                $this->databaseConnect,
+                $data["field1"], $data["field2"],
+                $this->userDao->getUser($this->databaseConnect , $this->extractLoginFromToken()));
+
             $this->successfulCreated(["id" => $entity->getId(),
                 "field1" => $entity->getField1(),
                 "field2" => $entity->getField2(),
@@ -119,24 +125,21 @@ class Controller
     public function deleteEntity($id)
     {
         if ($this->checkToken()) {
+
             $entity = $this->entityDao->getEntityById($this->databaseConnect, $id['id']);
-            if ($entity > 0) {
-                $this->entityDao->deleteEntity($this->databaseConnect, $id['id']);
-                $entity = $this->entityDao->getEntityById($this->databaseConnect, $id['id']);
-                if ($entity > 0) {
-                    http_response_code(500);
-                    echo json_encode(array("message" => "Internal error."));
-                } else {
-                    http_response_code(200);
-                    echo json_encode(array("message" => "Successfully delete."));
-                }
+            $user = $this->userDao->getUser( $this->databaseConnect, $this->extractLoginFromToken());
+
+            if (($entity > 0) && ($user > 0)  &&
+                ($this->entityDao->isOwn($this->databaseConnect,
+                    $user->getId(),$entity->getId()))) {
+
+                $this->entityDao->deleteEntity($this->databaseConnect, $entity->getId());
+
             } else {
-                http_response_code(404);
-                echo json_encode(array("message" => "Entity not exist."));
+                $this->notFoundRequest(["message" => "Entity not exist."]);
             }
         } else {
-            http_response_code(401);
-            echo json_encode(array("message" => "Login failed."));
+            $this->unauthorizedRequest(["message" => "Login failed."]);
         }
     }
 
@@ -164,10 +167,10 @@ class Controller
     {
         if ($this->checkToken()) {
             $entity = $this->entityDao->getEntityById($this->databaseConnect, $id['id']);
-            if ($entity > 0) {
+            $user = $this->userDao->getUser($this->databaseConnect, $this->extractLoginFromToken());
+            if ($entity > 0 && $this->entityDao->isOwn($this->databaseConnect, $user->getId(), $entity->getId())) {
 
                 $postData = file_get_contents('php://input');
-
                 $data = json_decode($postData, true);
 
                 $entityFromBase = $this->entityDao->updateEntity(
@@ -181,6 +184,7 @@ class Controller
                     )
                 );
             } else {
+
                 http_response_code(404);
                 echo json_encode(array("message" => "Entity not exist."));
             }
@@ -218,12 +222,10 @@ class Controller
                     )
                 );
             } else {
-                http_response_code(404);
-                echo json_encode(array("message" => "Entity not exist."));
+                $this->notFoundRequest(["message" => "Entity not exist."]);
             }
         } else {
-            http_response_code(401);
-            echo json_encode(array("message" => "Login failed."));
+            $this->unauthorizedRequest(["message" => "Login failed."]);
         }
     }
 
@@ -255,6 +257,35 @@ class Controller
         return false;
     }
 
+    public function extractLoginFromToken() : ?string{
+        $secret_key = "SECRET_KEY";//TODO вынести в глобальные константы и поместить в .conf
+        $jwt = null;
+
+        $authHeader = $_SERVER['HTTP_AUTHORIZATION'];
+
+        $arr = explode(" ", $authHeader);
+
+        $jwt = $arr[1];
+
+        if ($jwt) {
+
+            try {
+
+                JWT::$leeway = 60; // $leeway in seconds
+
+                $decodeData = ((array)(JWT::decode($jwt, $secret_key, array('HS256'))))["data"];
+
+                return ((array)$decodeData)['login'];
+
+            } catch (Exception $e) {
+                return false;
+            }
+        }
+        return false;
+    }
+
+
+
 
     private function successfulResponse($response)
     {
@@ -280,6 +311,18 @@ class Controller
     private function unauthorizedRequest($response)
     {
         http_response_code(401);
+        header('Content-Type: application/json');
+        echo json_encode($response);
+    }
+    private function notFoundRequest($response)
+    {
+        http_response_code(404);
+        header('Content-Type: application/json');
+        echo json_encode($response);
+    }
+    private function serverErrorRequest($response)
+    {
+        http_response_code(500);
         header('Content-Type: application/json');
         echo json_encode($response);
     }

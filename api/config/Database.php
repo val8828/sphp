@@ -1,14 +1,12 @@
 <?php
 
+namespace API\config;
+
+use PDO;
+use PDOException;
+
 class Database
 {
-
-    // parameters
-    private string $host = "localhost";
-    private string $db_name = "val8828_testbase";
-    private string $username = "val8828_testbase";
-    private string $password = "Ncg%34";
-
     // get base connection
     public function getConnection(): ?PDO
     {
@@ -20,7 +18,13 @@ class Database
         $conn = null;
 
         try {
-            $conn = new PDO("mysql:host=" . $this->host . ";dbname=" . $this->db_name, $this->username, $this->password, $options);
+            // database load config and set connection
+            $host = M_DB_HOST;
+            $db_name = M_DB_NAME;
+            $username = M_DB_USER;
+            $password = M_DB_PASS;
+
+            $conn = new PDO("mysql:host=$host;dbname=$db_name", $username, $password, $options);
             $conn->exec("set names utf8");
         } catch (PDOException $exception) {
             echo "Connection error: " . $exception->getMessage();

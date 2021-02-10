@@ -1,6 +1,6 @@
 <?php
 
-
+namespace API\dto;
 
 class EntityDao
 {
@@ -26,15 +26,30 @@ class EntityDao
         return $stmt->fetch();
     }
 
-    function createEntity($conn, $field1, $field2)
+    function createEntity(PDO $conn, $field1, $field2, $user)
     {
-        $id = $this->getNextId($conn);
+        $stmt = $conn->prepare("INSERT INTO entity(field1, field2, safedel) VALUES(:field1, :field2, DEFAULT)");
 
-        $stmt = $conn->prepare("INSERT INTO entity(id, field1, field2, safedel) VALUES(:id, :field1, :field2, DEFAULT)");
+        $stmt->execute(['field1' => $field1, 'field2' => $field2]);
 
-        $stmt->execute(['id' => $id, 'field1' => $field1, 'field2' => $field2]);
+        $entityId = $conn->lastInsertId();
 
-        return $this->getEntityById($conn, $id);
+        $stmt = $conn->prepare("INSERT INTO users_entities(userid, entityid) VALUES(:userid,:entityId)") ; /// :userId,:etityId)");
+
+        $userId = $user->getId();
+
+        $stmt->execute(['userid' => $userId, 'entityId' => $entityId]);
+
+        return $this->getEntityById($conn, $entityId);
+    }
+
+    function isOwn($conn, $userId, $entityId): bool
+    {
+        $stmt = $conn->prepare("SELECT * FROM users_entities WHERE userid=:userId AND entityid = :entityId");
+
+        $stmt->execute(['userId' => $userId, 'entityId' => $entityId]);
+
+        return (($stmt->fetch()) > 0);
     }
 
     function updateEntity($conn, $id, $field1, $field2, $safedel)
@@ -48,7 +63,11 @@ class EntityDao
 
     function deleteEntity($conn, $entityId)
     {
-        $stmt = $conn->prepare("DELETE FROM entity WHERE id = :id");
+        $stmt = $conn->prepare("DELETE FROM entity WHERE id=:id");
+
+        $stmt->execute(['id' => $entityId]);
+
+        $stmt = $conn->prepare("DELETE FROM users_entities WHERE entityid=:id");
 
         $stmt->execute(['id' => $entityId]);
     }

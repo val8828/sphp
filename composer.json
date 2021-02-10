@@ -1,4 +1,12 @@
+
 {
+  "autoload": {
+    "files": ["api/config/config.php"],
+    "psr-4": {
+      "API\\": "api/",
+      "Vendor\\Namespace\\": ""
+    }
+  },
   "require": {
     "firebase/php-jwt": "^5.2",
     "altorouter/altorouter": "^2.0",
