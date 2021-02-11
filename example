@@ -1,0 +1,79 @@
+<?php
+/**
+ * Created by PhpStorm.
+ * User: dshashkov
+ * Date: 08.08.18
+ * Time: 10:36
+ */
+
+namespace LTDBeget\app\handlers\external\controllers\domainRegistrar\v1\traits;
+
+use LTDBeget\warp\helpers\Date;
+use LTDBeget\app\lib\billing\enums\PayType;
+use LTDBeget\app\lib\order\registration\enums\RegistrationStage;
+use LTDBeget\app\lib\order\registration\models\registrationOrder\RegistrationOrder;
+use \beget\domainRegistrar\v1\structures\RegistrationOrder as RegistrationOrderProto;
+use beget\domainRegistrar\v1\structures\PayType as GrpcPayType;
+use LTDBeget\warp\exception\ServiceException;
+
+/**
+ * Trait RegistrationOrderMapper
+ *
+ * @package LTDBeget\app\handlers\external\controllers\domainRegistrar\v1\traits
+ */
+trait RegistrationOrderMapper
+{
+    /**
+     * @return \Closure
+     */
+    public function getRegistrationOrderMapper(): \Closure
+    {
+        return function (RegistrationOrder $order): RegistrationOrderProto {
+            return (new RegistrationOrderProto)
+                ->setId($order->id)
+                ->setFqdn($order->fqdn)
+                ->setCreatedAt(Date::mysqlToGrpc($order->created_at))
+                ->setRegisteredAt(!empty($order->registered_at) ? Date::mysqlToGrpc($order->registered_at) : NULL)
+                ->setPeriod($order->period)
+                ->setPayType($this->getGrpcPayType(PayType::get($order->pay_type)))
+                ->setStatus(RegistrationStage::get($order->stage)->getGrpcRegistrationStage());
+        };
+    }
+
+    /**
+     * @param PayType $payType
+     *
+     * @return int
+     * @throws ServiceException
+     */
+    public function getGrpcPayType(PayType $payType): int
+    {
+        switch ($payType) {
+            case PayType::BALANCE():
+                return GrpcPayType::BALANCE;
+            case PayType::BONUS():
+                return GrpcPayType::BONUS;
+            default:
+                throw new ServiceException('Invalid pay type');
+        }
+    }
+
+
+    /**
+     * @param int $type
+     *
+     * @return PayType
+     * @throws ServiceException
+     */
+    public function getValueByGrpc(int $type): PayType
+    {
+        switch ($type) {
+            case GrpcPayType::BALANCE:
+                return PayType::BALANCE();
+            case GrpcPayType::BONUS:
+                return PayType::BONUS();
+            default:
+                throw new ServiceException('Invalid pay type');
+        }
+    }
+}
