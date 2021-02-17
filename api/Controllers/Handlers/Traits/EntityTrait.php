@@ -1,7 +1,7 @@
 <?php
 
 
-namespace API\Controllers\Handlers;
+namespace API\Controllers\Handlers\Traits;
 
 
 use API\config\Database;
@@ -10,7 +10,7 @@ use API\Dto\EntityDao;
 use API\Dto\UserDAO;
 use PDO;
 
-class EntityHandler
+trait EntityTrait
 {
     private Database $database;
     private ?PDO $databaseConnect;
@@ -18,7 +18,7 @@ class EntityHandler
     private UserDAO $userDao;
 
     /**
-     * EntityHandler constructor.
+     * EntityTrait constructor.
      */
     public function __construct()
     {
@@ -28,12 +28,12 @@ class EntityHandler
         $this->userDao = new UserDAO();
     }
 
-    public function createEntity(string $field1, string $field2): Entity
+    public function createEntity(string $field1, string $field2, string $login): Entity
     {
         return $this->entityDao->createEntity(
             $this->databaseConnect,
             $field1, $field2,
-            $this->userDao->getUser($this->databaseConnect, SecurityHandler::extractLoginFromToken()));
+            $this->userDao->getUser($this->databaseConnect, $login));
 
     }
 

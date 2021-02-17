@@ -1,7 +1,7 @@
 <?php
 
 
-namespace API\Controllers\Handlers;
+namespace API\Controllers\Handlers\Traits;
 
 
 use API\config\Database;
@@ -11,7 +11,7 @@ use Exception;
 use Firebase\JWT\JWT;
 use PDO;
 
-class SecurityHandler
+trait SecurityTrait
 {
     private Database $database;
     private ?PDO $databaseConnect;

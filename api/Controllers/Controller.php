@@ -2,8 +2,7 @@
 
 namespace API\Controllers;
 
-use API\Controllers\Handlers\EntityHandler;
-use API\Controllers\Handlers\SecurityHandler;
+use API\Controllers\Handlers\Handler;
 use API\Response;
 
 class Controller
@@ -16,7 +15,7 @@ class Controller
         $userPassword = $data["password"];
 
         if (!is_null($userLogin) && !is_null($userPassword)) {
-            $security = new SecurityHandler();
+            $security = new Handler();
 
             if (!($security->is_userExists($userLogin))) {
                 $token = $security->generateToken($userLogin);
@@ -44,7 +43,7 @@ class Controller
 
         if (!is_null($userLogin) && !is_null($userPassword)) {
 
-            $security = new SecurityHandler();
+            $security = new Handler();
 
             if (($security->is_userExists($userLogin)) &&
                 $security->checkPassword($userLogin, $userPassword)) {
@@ -67,12 +66,12 @@ class Controller
 
     public function createEntity(): Response
     {
-        $security = new SecurityHandler();
+        $security = new Handler();
         if ($security->isTokenValid()) {
             $postData = file_get_contents('php://input');
             $data = json_decode($postData, true);
-            $entityHandler = new EntityHandler();
-            $entity = $entityHandler->createEntity($data['field1'], $data['field2']);
+            $entityHandler = new Handler();
+            $entity = $entityHandler->createEntity($data['field1'], $data['field2'], Handler::extractLoginFromToken());
 
             return new Response(SUCCESSFUL_CREATED_CODE,
                 ["id" => $entity->getId(),
@@ -89,12 +88,12 @@ class Controller
     public function deleteEntity($param): Response
     {
         $id = $param ['id'];
-        $security = new SecurityHandler();
+        $security = new Handler();
         if ($security->isTokenValid()) {
-            $userLogin = SecurityHandler::extractLoginFromToken();
+            $userLogin = Handler::extractLoginFromToken();
             $userId = $security->getUserId($userLogin);
 
-            $entityHandler = new EntityHandler();
+            $entityHandler = new Handler();
             $entityOwnerId = $entityHandler->getEntityOwnerId($id);
             if (count($entityOwnerId) === 1 && $entityOwnerId[0]['userid'] == $userId) {
                 $entityHandler->deleteEntity($id);
@@ -120,12 +119,12 @@ class Controller
     public function safeDeleteEntity($param): Response
     {
         $id = $param ['id'];
-        $security = new SecurityHandler();
+        $security = new Handler();
         if ($security->isTokenValid()) {
-            $userLogin = SecurityHandler::extractLoginFromToken();
+            $userLogin = Handler::extractLoginFromToken();
             $userId = $security->getUserId($userLogin);
 
-            $entityHandler = new EntityHandler();
+            $entityHandler = new Handler();
             $entityOwnerId = $entityHandler->getEntityOwnerId($id);
             foreach ($entityOwnerId as $owner) {
                 if ($owner['userid'] == $userId) {
@@ -145,12 +144,12 @@ class Controller
     public function updateEntity($param): Response
     {
         $id = $param ['id'];
-        $security = new SecurityHandler();
+        $security = new Handler();
         if ($security->isTokenValid()) {
-            $userLogin = SecurityHandler::extractLoginFromToken();
+            $userLogin = Handler::extractLoginFromToken();
             $userId = $security->getUserId($userLogin);
 
-            $entityHandler = new EntityHandler();
+            $entityHandler = new Handler();
             $entityOwnerId = $entityHandler->getEntityOwnerId($id);
             foreach ($entityOwnerId as $owner) {
                 if ($owner['userid'] == $userId) {
@@ -179,12 +178,12 @@ class Controller
 
     public function searchEntity(): Response
     {
-        $security = new SecurityHandler();
+        $security = new Handler();
         if ($security->isTokenValid()) {
-            $userLogin = SecurityHandler::extractLoginFromToken();
+            $userLogin = Handler::extractLoginFromToken();
             $userId = $security->getUserId($userLogin);
 
-            $entityHandler = new EntityHandler();
+            $entityHandler = new Handler();
             $entities = $entityHandler->getEntitiesByFields($_GET['field1'], $_GET['field2'], $userId);
             if (count($entities) > 0) {
                 return new Response(SUCCESSFUL_RESPONSE_CODE,
@@ -202,12 +201,12 @@ class Controller
     public function getEntity($param): Response
     {
         $id = $param ['id'];
-        $security = new SecurityHandler();
+        $security = new Handler();
         if ($security->isTokenValid()) {
-            $userLogin = SecurityHandler::extractLoginFromToken();
+            $userLogin = Handler::extractLoginFromToken();
             $userId = $security->getUserId($userLogin);
 
-            $entityHandler = new EntityHandler();
+            $entityHandler = new Handler();
             $entities = $entityHandler->getEntityById($id, $userId);
             if (count($entities) == 1) {
                 return new Response(SUCCESSFUL_RESPONSE_CODE,
