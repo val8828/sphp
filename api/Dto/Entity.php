@@ -1,6 +1,6 @@
 <?php
 
-namespace API\dto;
+namespace API\Dto;
 
 class Entity
 {

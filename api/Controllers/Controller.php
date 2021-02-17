@@ -2,328 +2,228 @@
 
 namespace API\Controllers;
 
-use API\config\Database;
-use API\dto\User;
-use API\dto\UserDAO;
-use API\dto\EntityDao;
-use \Firebase\JWT\JWT;
-use PDO;
+use API\Controllers\Handlers\EntityHandler;
+use API\Controllers\Handlers\SecurityHandler;
+use API\Response;
 
 class Controller
 {
-    private Database $database;
-    private ?PDO $databaseConnect;
-
-    private UserDAO $userDao;
-    private EntityDao $entityDao;
-
-    public function __construct()
-    {
-        $this->database = new Database();
-        $this->databaseConnect = $this->database->getConnection();
-
-        $this->userDao = new UserDAO();
-        $this->entityDao = new EntityDao();
-    }
-    private function encodePassword($password): ?string
-    {
-        return password_hash($password, PASSWORD_BCRYPT);
-    }
-
-    private function addUserToBase($login, $password, $token)
-    {
-        $user = new User();
-
-        $user->setPassword($this->encodePassword($password));
-        $user->setLogin($login);
-        $user->setToken($token);
-
-        $this->userDao->createUser($this->databaseConnect, $user);
-    }
-
-    public function register()
+    public function register(): Response
     {
         $postData = file_get_contents('php://input');
         $data = json_decode($postData, true);
         $userLogin = $data["login"];
         $userPassword = $data["password"];
 
-        if ($this->checkUserExists($userLogin)) {
-            if ($this->isUserValid($userLogin, $userPassword)) {
-                $token = $this->generateToken($userLogin);
-                $this->updateUserTokenInBase($userLogin, $token);
-                $this->successfulResponse(['token' => $token]);
+        if (!is_null($userLogin) && !is_null($userPassword)) {
+            $security = new SecurityHandler();
+
+            if (!($security->is_userExists($userLogin))) {
+                $token = $security->generateToken($userLogin);
+                $security->addUserToBase($userLogin, $userPassword, $token);
+                //Successful response
+                return new Response(SUCCESSFUL_CREATED_CODE,
+                    array("token" => $token));
+
             } else {
-                $this->badRequestResponse(['message' => "Login failed."]);
+                return new Response(BAD_REQUEST_CODE,
+                    array("message" => "user already exist"));
             }
         } else {
-            $token = $this->generateToken($userLogin);
-            $this->addUserToBase($userLogin, $userPassword, $token);
-            $this->successfulCreated(['token' => $token]);
+            return new Response(BAD_REQUEST_CODE,
+                array("message" => "incomplete credentials"));
         }
     }
 
-    private function isUserValid(string $userLogin, string $userPassword): bool
+    public function authorize(): Response
     {
-        $userPasswordInBase =
-            ($this->userDao->getUserPassword($this->databaseConnect, $userLogin));
-        return password_verify($userPassword, $userPasswordInBase);
+        $postData = file_get_contents('php://input');
+        $data = json_decode($postData, true);
+        $userLogin = $data["login"];
+        $userPassword = $data["password"];
+
+        if (!is_null($userLogin) && !is_null($userPassword)) {
+
+            $security = new SecurityHandler();
+
+            if (($security->is_userExists($userLogin)) &&
+                $security->checkPassword($userLogin, $userPassword)) {
+
+                $token = $security->generateToken($userLogin);
+                $security->updateUserTokenInBase($userLogin, $token);
+
+                return new Response(SUCCESSFUL_RESPONSE_CODE,
+                    array("token" => $token));
+
+            } else {
+                return new Response(BAD_REQUEST_CODE,
+                    array("message" => "wrong credentials"));
+            }
+        } else {
+            return new Response(BAD_REQUEST_CODE,
+                array("message" => "incomplete credentials"));
+        }
     }
 
-    private function generateToken($login): string
+    public function createEntity(): Response
     {
-        $secret_key = "SECRET_KEY";//TODO вынести  константы и поместить в .conf
-        $issuer_claim = "THE_ISSUER"; //TODO вынести  константы и поместить в .conf
-        $audience_claim = "THE_AUDIENCE";//TODO вынести константы и поместить в .conf
-        $issuedat_claim = time(); // issued at
-        $notbefore_claim = $issuedat_claim + 10; //TODO вынести  константы и поместить в .conf
-        $expire_claim = $issuedat_claim + 300; //TODO вынести  константы и поместить в .conf
-        $token = array(
-            "iss" => $issuer_claim,
-            "aud" => $audience_claim,
-            "iat" => $issuedat_claim,
-            "nbf" => $notbefore_claim,
-            "exp" => $expire_claim,
-            "data" => array(
-                "login" => $login
-            ));
-
-        return JWT::encode($token, $secret_key);
-    }
-
-    private function updateUserTokenInBase($login, $token)
-    {
-        $this->userDao->updateUserToken($this->databaseConnect, $login, $token);
-    }
-
-    function checkUserExists($login): bool
-    {
-        return ($this->userDao->getUser($this->databaseConnect, $login)) > 0;
-    }
-
-    public function createEntity()
-    {
-        if ($this->checkToken()) {
+        $security = new SecurityHandler();
+        if ($security->isTokenValid()) {
             $postData = file_get_contents('php://input');
             $data = json_decode($postData, true);
+            $entityHandler = new EntityHandler();
+            $entity = $entityHandler->createEntity($data['field1'], $data['field2']);
 
-            $entity = $this->entityDao->createEntity(
-                $this->databaseConnect,
-                $data["field1"], $data["field2"],
-                $this->userDao->getUser($this->databaseConnect , $this->extractLoginFromToken()));
-
-            $this->successfulCreated(["id" => $entity->getId(),
-                "field1" => $entity->getField1(),
-                "field2" => $entity->getField2(),
-                "safedel" => $entity->getSafedel()]);
+            return new Response(SUCCESSFUL_CREATED_CODE,
+                ["id" => $entity->getId(),
+                    "field1" => $entity->getField1(),
+                    "field2" => $entity->getField2(),
+                    "safedel" => $entity->getSafedel()]);
 
         } else {
-            $this->badRequestResponse(["message" => "Bad Request"]);
+            return new Response(BAD_REQUEST_CODE,
+                array("message" => "wrong credentials"));
         }
     }
 
-    public function deleteEntity($id)
+    public function deleteEntity($param): Response
     {
-        if ($this->checkToken()) {
+        $id = $param ['id'];
+        $security = new SecurityHandler();
+        if ($security->isTokenValid()) {
+            $userLogin = SecurityHandler::extractLoginFromToken();
+            $userId = $security->getUserId($userLogin);
 
-            $entity = $this->entityDao->getEntityById($this->databaseConnect, $id['id']);
-            $user = $this->userDao->getUser( $this->databaseConnect, $this->extractLoginFromToken());
+            $entityHandler = new EntityHandler();
+            $entityOwnerId = $entityHandler->getEntityOwnerId($id);
+            if (count($entityOwnerId) === 1 && $entityOwnerId[0]['userid'] == $userId) {
+                $entityHandler->deleteEntity($id);
+                return new Response(SUCCESSFUL_RESPONSE_CODE,
+                    array("message" => 'successful deleted'));
+            } elseif (count($entityOwnerId) > 1) {
+                foreach ($entityOwnerId as $owner) {
+                    if ($owner['userid'] == $userId) {
+                        $entityHandler->deleteUserPrivilegesFromEntity($userId, $id);
+                        return new Response(SUCCESSFUL_RESPONSE_CODE,
+                            array("message" => 'successful deleted'));
+                    }
+                }
+            }
+            return new Response(BAD_REQUEST_CODE,
+                array("message" => "wrong credentials"));
+        } else {
+            return new  Response(BAD_REQUEST_CODE,
+                array("message" => "wrong credentials"));
+        }
+    }
 
-            if (($entity > 0) && ($user > 0)  &&
-                ($this->entityDao->isOwn($this->databaseConnect,
-                    $user->getId(),$entity->getId()))) {
+    public function safeDeleteEntity($param): Response
+    {
+        $id = $param ['id'];
+        $security = new SecurityHandler();
+        if ($security->isTokenValid()) {
+            $userLogin = SecurityHandler::extractLoginFromToken();
+            $userId = $security->getUserId($userLogin);
 
-                $this->entityDao->deleteEntity($this->databaseConnect, $entity->getId());
+            $entityHandler = new EntityHandler();
+            $entityOwnerId = $entityHandler->getEntityOwnerId($id);
+            foreach ($entityOwnerId as $owner) {
+                if ($owner['userid'] == $userId) {
+                    $entityHandler->safeDeleteEntity($id);
+                    return new Response(SUCCESSFUL_RESPONSE_CODE,
+                        array("message" => 'successful deleted'));
+                }
+            }
+            return new Response(BAD_REQUEST_CODE,
+                array("message" => "wrong credentials"));
+        } else {
+            return new  Response(BAD_REQUEST_CODE,
+                array("message" => "wrong credentials"));
+        }
+    }
 
+    public function updateEntity($param): Response
+    {
+        $id = $param ['id'];
+        $security = new SecurityHandler();
+        if ($security->isTokenValid()) {
+            $userLogin = SecurityHandler::extractLoginFromToken();
+            $userId = $security->getUserId($userLogin);
+
+            $entityHandler = new EntityHandler();
+            $entityOwnerId = $entityHandler->getEntityOwnerId($id);
+            foreach ($entityOwnerId as $owner) {
+                if ($owner['userid'] == $userId) {
+                    $postData = file_get_contents('php://input');
+                    $data = json_decode($postData, true);
+                    $field1 = $data["field1"];
+                    $field2 = $data["field2"];
+                    $newEntity = $entityHandler->updateEntity($id, $field1, $field2, 0);
+
+                    return new Response(SUCCESSFUL_RESPONSE_CODE,
+                        array(
+                            "id" => $newEntity->getId(),
+                            "field1" => $newEntity->getField1(),
+                            "field2" => $newEntity->getField2(),
+                            "safedel" => $newEntity->getSafedel(),
+                        ));
+                }
+            }
+            return new Response(BAD_REQUEST_CODE,
+                array("message" => "wrong credentials"));
+        } else {
+            return new  Response(BAD_REQUEST_CODE,
+                array("message" => "wrong credentials"));
+        }
+    }
+
+    public function searchEntity(): Response
+    {
+        $security = new SecurityHandler();
+        if ($security->isTokenValid()) {
+            $userLogin = SecurityHandler::extractLoginFromToken();
+            $userId = $security->getUserId($userLogin);
+
+            $entityHandler = new EntityHandler();
+            $entities = $entityHandler->getEntitiesByFields($_GET['field1'], $_GET['field2'], $userId);
+            if (count($entities) > 0) {
+                return new Response(SUCCESSFUL_RESPONSE_CODE,
+                    $entities);
             } else {
-                $this->notFoundRequest(["message" => "Entity not exist."]);
+                return new Response(NOT_FOUND_CODE,
+                    array("message" => "entities not found"));
             }
         } else {
-            $this->unauthorizedRequest(["message" => "Login failed."]);
+            return new  Response(BAD_REQUEST_CODE,
+                array("message" => "wrong credentials"));
         }
     }
 
-    public function safeDeleteEntity($id)
+    public function getEntity($param): Response
     {
-        if ($this->checkToken()) {
-            $entity = $this->entityDao->getEntityById($this->databaseConnect, $id['id']);
-            if ($entity > 0) {
-                $this->entityDao->safeDeleteEntity($this->databaseConnect, $id['id']);
+        $id = $param ['id'];
+        $security = new SecurityHandler();
+        if ($security->isTokenValid()) {
+            $userLogin = SecurityHandler::extractLoginFromToken();
+            $userId = $security->getUserId($userLogin);
 
-                http_response_code(200);
-                echo json_encode(array("message" => "Successfully delete."));
-
-            } else {
-                http_response_code(404);
-                echo json_encode(array("message" => "Entity not exist."));
-            }
-        } else {
-            http_response_code(401);
-            echo json_encode(array("message" => "Login failed."));
-        }
-    }
-
-    public function updateEntity($id)
-    {
-        if ($this->checkToken()) {
-            $entity = $this->entityDao->getEntityById($this->databaseConnect, $id['id']);
-            $user = $this->userDao->getUser($this->databaseConnect, $this->extractLoginFromToken());
-            if ($entity > 0 && $this->entityDao->isOwn($this->databaseConnect, $user->getId(), $entity->getId())) {
-
-                $postData = file_get_contents('php://input');
-                $data = json_decode($postData, true);
-
-                $entityFromBase = $this->entityDao->updateEntity(
-                    $this->databaseConnect, $id['id'], $data["field1"], $data["field2"], 0);
-                echo json_encode(
+            $entityHandler = new EntityHandler();
+            $entities = $entityHandler->getEntityById($id, $userId);
+            if (count($entities) == 1) {
+                return new Response(SUCCESSFUL_RESPONSE_CODE,
                     array(
-                        "id" => $entityFromBase->getId(),
-                        "field1" => $entityFromBase->getField1(),
-                        "field2" => $entityFromBase->getField2(),
-                        "safedel" => $entityFromBase->getSafedel(),
-                    )
-                );
+                        "id" => $entities->getId(),
+                        "field1" => $entities->getField1(),
+                        "field2" => $entities->getField2(),
+                        "safedel" => $entities->getSafedel(),
+                    ));
             } else {
-
-                http_response_code(404);
-                echo json_encode(array("message" => "Entity not exist."));
-            }
-
-        } else {
-            http_response_code(401);
-            echo json_encode(array("message" => "Login failed."));
-        }
-    }
-
-    public function searchEntity()
-    {
-        if ($this->checkToken()) {
-            header("content-type:application/json");
-            echo json_encode($this->entityDao->getEntitiesByFields($this->databaseConnect, $_GET['field1'], $_GET['field2']));
-
-        } else {
-            http_response_code(401);
-            echo json_encode(array("message" => "Login failed."));
-        }
-    }
-
-    public function getEntity($id)
-    {
-        if ($this->checkToken()) {
-
-            $entity = $this->entityDao->getEntityById($this->databaseConnect, $id['id']);
-            if ($entity > 0) {
-                echo json_encode(
-                    array(
-                        "id" => $entity->getId(),
-                        "field1" => $entity->getField1(),
-                        "field2" => $entity->getField2(),
-                        "safedel" => $entity->getSafedel(),
-                    )
-                );
-            } else {
-                $this->notFoundRequest(["message" => "Entity not exist."]);
+                return new Response(NOT_FOUND_CODE,
+                    array("message" => "entities not found"));
             }
         } else {
-            $this->unauthorizedRequest(["message" => "Login failed."]);
+            return new  Response(BAD_REQUEST_CODE,
+                array("message" => "wrong credentials"));
         }
-    }
-
-    public function checkToken() :bool
-    {
-        $secret_key = "SECRET_KEY";//TODO вынести в глобальные константы и поместить в .conf
-        $jwt = null;
-
-        $authHeader = $_SERVER['HTTP_AUTHORIZATION'];
-
-        $arr = explode(" ", $authHeader);
-
-        $jwt = $arr[1];
-
-        if ($jwt) {
-
-            try {
-
-                JWT::$leeway = 60; // $leeway in seconds
-
-                JWT::decode($jwt, $secret_key, array('HS256'));//[data[login]]
-
-                return true;
-
-            } catch (Exception $e) {
-                return false;
-            }
-        }
-        return false;
-    }
-
-    public function extractLoginFromToken() : ?string{
-        $secret_key = "SECRET_KEY";//TODO вынести в глобальные константы и поместить в .conf
-        $jwt = null;
-
-        $authHeader = $_SERVER['HTTP_AUTHORIZATION'];
-
-        $arr = explode(" ", $authHeader);
-
-        $jwt = $arr[1];
-
-        if ($jwt) {
-
-            try {
-
-                JWT::$leeway = 60; // $leeway in seconds
-
-                $decodeData = ((array)(JWT::decode($jwt, $secret_key, array('HS256'))))["data"];
-
-                return ((array)$decodeData)['login'];
-
-            } catch (Exception $e) {
-                return false;
-            }
-        }
-        return false;
-    }
-
-
-
-
-    private function successfulResponse($response)
-    {
-        http_response_code(200);
-        header('Content-Type: application/json');
-        echo json_encode($response);
-    }
-
-    private function successfulCreated($response)
-    {
-        http_response_code(201);
-        header('Content-Type: application/json');
-        echo json_encode($response);
-    }
-
-    private function badRequestResponse($response)
-    {
-        http_response_code(400);
-        header('Content-Type: application/json');
-        echo json_encode($response);
-    }
-
-    private function unauthorizedRequest($response)
-    {
-        http_response_code(401);
-        header('Content-Type: application/json');
-        echo json_encode($response);
-    }
-    private function notFoundRequest($response)
-    {
-        http_response_code(404);
-        header('Content-Type: application/json');
-        echo json_encode($response);
-    }
-    private function serverErrorRequest($response)
-    {
-        http_response_code(500);
-        header('Content-Type: application/json');
-        echo json_encode($response);
     }
 }

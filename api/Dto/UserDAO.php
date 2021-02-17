@@ -1,7 +1,8 @@
 <?php
 
-namespace API\dto;
+namespace API\Dto;
 
+use Exception;
 use PDO;
 
 class UserDAO
@@ -10,21 +11,32 @@ class UserDAO
     public function getUser($conn, $login)
     {
 
-        $stmt = $conn->prepare("SELECT id, login, password FROM users WHERE login = :login");
+        $stmt = $conn->prepare("SELECT id, login, password, token FROM users WHERE login =:login LIMIT 1");
 
         $stmt->execute(['login' => $login]);
 
-        $stmt->setFetchMode(PDO::FETCH_CLASS, 'User');
-
-        return $stmt->fetch();
+        if($stmt->setFetchMode(PDO::FETCH_CLASS, 'API\Dto\User')){
+            return $stmt->fetch();
+        }else{
+            return null;
+        }
     }
 
-    public function createUser($conn, $user)
+    public function createUser($conn, User $user) : User
     {
-        $stmt = $conn->prepare("INSERT INTO users(login, password, token) VALUES(:login, :password, :token)");
+        //Check if user already exist
+        $oldUser = $this->getUser($conn,$user->getLogin());
 
-        $stmt->execute(['login' => $user->getLogin(), 'password' => $user->getPassword(), 'token' => $user->getToken()]);
+        if($oldUser == false) {
 
+            $stmt = $conn->prepare("INSERT INTO users(login, password, token) VALUES(:login, :password, :token)");
+
+            $stmt->execute(['login' => $user->getLogin(), 'password' => $user->getPassword(), 'token' => $user->getToken()]);
+
+            return $this->getUser($conn,$user->getLogin());
+        }else{
+            return $oldUser;
+        }
     }
 
     public function removeUser($conn,$user)
